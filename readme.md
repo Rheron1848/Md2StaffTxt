@@ -1,4 +1,4 @@
-![image](https://github.com/user-attachments/assets/d70efaa1-1ac3-4adf-b847-46b197396c43)# 文本格式化工具-从markdown格式转换为电影staff表记排版
+# 文本格式化工具-从markdown格式转换为电影staff表记排版
 
 这是一个用Python编写的文本格式化工具,主要用于处理和格式化文本文件,特别适合处理包含中文和英文混合的文本内容。
 
@@ -30,10 +30,9 @@ trsty
 ```
 
 ##输出示例
-```
-![image](https://github.com/user-attachments/assets/6d5ee64b-f2f3-4555-a68a-cdfa9c6ba933)
+![image](https://github.com/user-attachments/assets/d566ade3-da4e-4fe3-920f-911f8db6f4eb)
 此为粘贴到剪映后的效果
-```
+
 
 ## 功能特点
 
