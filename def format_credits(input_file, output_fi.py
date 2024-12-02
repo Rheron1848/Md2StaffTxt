@@ -12,125 +12,119 @@ def format_credits(input_file, output_file, max_width, align_mode, justify_mode=
     formatted_lines = []
     paragraph = []
     
-    # 如果启用弹性宽度,先计算最佳宽度
-    actual_width = max_width
-    if flexible_width:
-        # 收集所有段落和标题的宽度
-        widths = []
-        temp_para = []
-        current_section = None
-        section_widths = {}
-        
-        for line in lines:
-            line = line.strip()
-            if not line:
-                if temp_para:
-                    # 计算段落可能的宽度
-                    total_length = sum(get_string_width(name) for name in temp_para)
-                    avg_length = total_length / len(temp_para)
-                    names_per_line = max(1, int(max_width / (avg_length + 1)))
-                    para_width = total_length // names_per_line + (len(temp_para) - 1)
-                    if current_section:
-                        if current_section not in section_widths:
-                            section_widths[current_section] = []
-                        section_widths[current_section].append(para_width)
-                    widths.append(para_width)
-                    temp_para = []
-                continue
-            if line.startswith('#'):
-                if temp_para:
-                    total_length = sum(get_string_width(name) for name in temp_para)
-                    avg_length = total_length / len(temp_para)
-                    names_per_line = max(1, int(max_width / (avg_length + 1)))
-                    para_width = total_length // names_per_line + (len(temp_para) - 1)
-                    if current_section:
-                        if current_section not in section_widths:
-                            section_widths[current_section] = []
-                        section_widths[current_section].append(para_width)
-                    widths.append(para_width)
-                    temp_para = []
-                line = line.lstrip('#').strip()
-                current_section = line
-                widths.append(get_string_width(line.upper()))
-            else:
-                temp_para.append(line.strip())
-        
-        # 找到最接近max_width的宽度,同时确保每个段落的宽度都合适
-        if widths:
-            min_width = min(widths)
-            max_needed = max(widths)
-            
-            # 确保每个段落的宽度都适当
-            section_max_widths = {}
-            for section, section_width_list in section_widths.items():
-                section_max_widths[section] = max(section_width_list)
-            
-            # 调整宽度以确保段落间的宽度关系合适
-            if len(section_max_widths) > 1:
-                for section1, width1 in section_max_widths.items():
-                    for section2, width2 in section_max_widths.items():
-                        if section1 != section2:
-                            max_needed = max(max_needed, max(width1, width2))
-            
-            if min_width <= max_width <= max_needed:
-                actual_width = max_width
-            elif max_width > max_needed:
-                actual_width = max_needed
-            else:
-                actual_width = min_width
-            print(f"\n使用弹性宽度: {actual_width} (原始宽度: {max_width})")
+    # 计算实际宽度
+    actual_width = calculate_width(lines, max_width) if flexible_width else max_width
 
     for line in lines:
         line = line.strip()
         if not line:
-            # 处理段落结束
-            if paragraph:
-                format_paragraph(paragraph, formatted_lines, actual_width, align_mode, justify_mode)
-                paragraph = []
+            process_paragraph(paragraph, formatted_lines, actual_width, align_mode, justify_mode)
             formatted_lines.append('')  # 保持空行
             continue
 
-        # 处理Markdown标题
         if line.startswith('#'):
-            # 处理未完成的段落
-            if paragraph:
-                format_paragraph(paragraph, formatted_lines, actual_width, align_mode, justify_mode)
-                paragraph = []
-            
-            level = line.count('#')
-            line = line.lstrip('#').strip()
-            # 根据对齐模式处理标题
-            title = line.upper()
-            title_width = get_string_width(title)
-            if align_mode == 1:  # 左对齐
-                formatted_lines.append('\n' if level == 2 else '\n\n' if level == 1 else '')
-                formatted_lines.append(title)
-            elif align_mode == 2:  # 居中对齐
-                formatted_lines.append('\n' if level == 2 else '\n\n' if level == 1 else '')
-                padding = (actual_width - title_width) // 2
-                formatted_lines.append(' ' * padding + title)
-            else:  # 右对齐
-                formatted_lines.append('\n' if level == 2 else '\n\n' if level == 1 else '')
-                padding = actual_width - title_width
-                formatted_lines.append(' ' * padding + title)
-            formatted_lines.append('')  # 标题后添加一个空行
+            process_paragraph(paragraph, formatted_lines, actual_width, align_mode, justify_mode)
+            process_title(line, formatted_lines, actual_width, align_mode)
         else:
-            # 收集段落中的名字
             paragraph.append(line.strip())
 
     # 处理最后一个段落
-    if paragraph:
-        format_paragraph(paragraph, formatted_lines, actual_width, align_mode, justify_mode)
+    process_paragraph(paragraph, formatted_lines, actual_width, align_mode, justify_mode)
 
-    # 检查输出路径是否合法
+    # 写入文件
+    write_output(output_file, formatted_lines)
+            
+    # 打印结果信息
+    print_results(input_file, output_file, actual_width, align_mode, justify_mode, flexible_width)
+
+def calculate_width(lines, max_width):
+    """计算弹性宽度"""
+    widths = []
+    temp_para = []
+    current_section = None
+    section_widths = {}
+    
+    for line in lines:
+        line = line.strip()
+        if not line and temp_para:
+            widths.append(calculate_paragraph_width(temp_para, max_width, current_section, section_widths))
+            temp_para = []
+            continue
+            
+        if line.startswith('#'):
+            if temp_para:
+                widths.append(calculate_paragraph_width(temp_para, max_width, current_section, section_widths))
+                temp_para = []
+            current_section = line.lstrip('#').strip()
+            widths.append(get_string_width(current_section.upper()))
+        else:
+            temp_para.append(line.strip())
+    
+    if not widths:
+        return max_width
+        
+    min_width = min(widths)
+    max_needed = max(widths)
+    
+    if min_width <= max_width <= max_needed:
+        return max_width
+    elif max_width > max_needed:
+        return max_needed
+    else:
+        return min_width
+
+def calculate_paragraph_width(para, max_width, section, section_widths):
+    """计算段落宽度"""
+    total_length = sum(get_string_width(name) for name in para)
+    avg_length = total_length / len(para)
+    names_per_line = max(1, int(max_width / (avg_length + 1)))
+    width = total_length // names_per_line + (len(para) - 1)
+    
+    if section:
+        if section not in section_widths:
+            section_widths[section] = []
+        section_widths[section].append(width)
+    return width
+
+def process_paragraph(paragraph, formatted_lines, max_width, align_mode, justify_mode):
+    """处理段落"""
+    if not paragraph:
+        return
+        
+    format_paragraph(paragraph, formatted_lines, max_width, align_mode, justify_mode)
+    paragraph.clear()
+
+def process_title(line, formatted_lines, max_width, align_mode):
+    """处理标题"""
+    level = line.count('#')
+    title = line.lstrip('#').strip().upper()
+    title_width = get_string_width(title)
+    
+    formatted_lines.append('\n' if level == 2 else '\n\n' if level == 1 else '')
+    
+    if align_mode == 2:  # 居中对齐
+        padding = (max_width - title_width) // 2
+        formatted_lines.append(' ' * padding + title)
+    elif align_mode == 3:  # 右对齐
+        padding = max_width - title_width
+        formatted_lines.append(' ' * padding + title)
+    else:  # 左对齐
+        formatted_lines.append(title)
+        
+    formatted_lines.append('')
+
+def write_output(output_file, formatted_lines):
+    """写入输出文件"""
     output_dir = os.path.dirname(output_file)
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     with open(output_file, 'w', encoding='utf-8') as file:
-        for formatted_line in formatted_lines:
-            file.write(formatted_line + '\n')
-            
+        for line in formatted_lines:
+            file.write(line + '\n')
+
+def print_results(input_file, output_file, actual_width, align_mode, justify_mode, flexible_width):
+    """打印处理结果"""
     print(f"\n格式化完成!")
     print(f"输入文件: {input_file}")
     print(f"输出文件: {output_file}")
@@ -161,71 +155,91 @@ def format_paragraph(names, formatted_lines, max_width, align_mode, justify_mode
     # 估算每行可以放置的名字数量
     names_per_line = max(1, int(max_width / (avg_length + 1)))
     
-    # 将名字分组
-    lines = []
+    # 将名字分组并格式化每一行
     for i in range(0, len(names), names_per_line):
         line_names = names[i:i + names_per_line]
+        line_text = format_line(line_names, max_width, align_mode, justify_mode)
+        formatted_lines.append(line_text)
+
+def format_line(line_names, max_width, align_mode, justify_mode):
+    """格式化单行文本"""
+    if len(line_names) == 1:
+        line_text = format_single_name(line_names[0], max_width, align_mode, justify_mode)
+    else:
+        line_text = format_multiple_names(line_names, max_width, align_mode, justify_mode)
+    return line_text
+
+def format_single_name(name, max_width, align_mode, justify_mode):
+    """格式化单个名字"""
+    line_text = name
+    current_width = get_string_width(line_text)
+    
+    if justify_mode:
+        if align_mode == 2:  # 居中对齐
+            padding = (max_width - current_width) // 2
+            line_text = ' ' * padding + line_text
+            # 补齐右侧空格以达到max_width
+            right_padding = max_width - (padding + current_width)
+            line_text += ' ' * right_padding
+        elif align_mode == 3:  # 右对齐
+            padding = max_width - current_width
+            line_text = ' ' * padding + line_text
+        else:  # 左对齐
+            line_text += ' ' * (max_width - current_width)
+    
+    return line_text
+
+def format_multiple_names(names, max_width, align_mode, justify_mode):
+    """格式化多个名字"""
+    total_name_width = sum(get_string_width(name) for name in names)
+    available_space = max_width - total_name_width
+    
+    if justify_mode:
+        line_text = format_justified(names, available_space, max_width)
+    else:
+        space_between = max(1, available_space // (len(names) - 1))
+        line_text = (' ' * space_between).join(names)
         
-        # 计算名字之间的间距
-        if len(line_names) > 1:
-            total_name_width = sum(get_string_width(name) for name in line_names)
-            available_space = max_width - total_name_width
-            
-            if justify_mode:  # 左右拉齐模式
-                # 计算不均匀的空格分配
-                spaces = available_space
-                gaps = len(line_names) - 1
-                space_counts = []
-                
-                # 确保每个间隔至少有一个空格
-                min_spaces = gaps
-                remaining_spaces = spaces - min_spaces
-                
-                if remaining_spaces > 0:
-                    for j in range(gaps):
-                        if remaining_spaces > 0:
-                            space = remaining_spaces // (gaps - j)
-                            space_counts.append(space + 1)  # 加1是因为要保证最小间隔
-                            remaining_spaces -= space
-                        else:
-                            space_counts.append(1)  # 至少保留一个空格
-                else:
-                    space_counts = [1] * gaps  # 每个间隔都使用一个空格
-                
-                # 使用计算好的空格数连接名字
-                line_text = ''
-                for j, name in enumerate(line_names[:-1]):
-                    line_text += name + ' ' * space_counts[j]
-                line_text += line_names[-1]
-                
-                # 确保每行都达到最大宽度
-                current_width = get_string_width(line_text)
-                if current_width < max_width:
-                    padding = max_width - current_width
-                    line_text += ' ' * padding
-            else:  # 等间距模式
-                space_between = max(1, available_space // (len(line_names) - 1))
-                line_text = (' ' * space_between).join(line_names)
-        else:
-            line_text = line_names[0]
-            if justify_mode:  # 单个名字时也需要填充到最大宽度
-                current_width = get_string_width(line_text)
-                padding = max_width - current_width
-                line_text += ' ' * padding
-            
-        # 根据对齐模式添加缩进
-        if not justify_mode:  # 只在非左右拉齐模式下应用对齐
+        if not justify_mode:
             line_width = get_string_width(line_text)
-            if align_mode == 2:  # 居中对齐
+            if align_mode == 2:
                 padding = (max_width - line_width) // 2
                 line_text = ' ' * padding + line_text
-            elif align_mode == 3:  # 右对齐
+            elif align_mode == 3:
                 padding = max_width - line_width
                 line_text = ' ' * padding + line_text
-            
-        lines.append(line_text)
+                
+    return line_text
+
+def format_justified(names, available_space, max_width):
+    """格式化左右对齐文本"""
+    gaps = len(names) - 1
+    min_spaces = gaps
+    remaining_spaces = available_space - min_spaces
     
-    formatted_lines.extend(lines)
+    space_counts = []
+    if remaining_spaces > 0:
+        for j in range(gaps):
+            if remaining_spaces > 0:
+                space = remaining_spaces // (gaps - j)
+                space_counts.append(space + 1)
+                remaining_spaces -= space
+            else:
+                space_counts.append(1)
+    else:
+        space_counts = [1] * gaps
+    
+    line_text = ''
+    for j, name in enumerate(names[:-1]):
+        line_text += name + ' ' * space_counts[j]
+    line_text += names[-1]
+    
+    current_width = get_string_width(line_text)
+    if current_width < max_width:
+        padding = max_width - current_width
+        line_text += ' ' * padding
+        
+    return line_text
 
 try:
     print("\n=== 文本格式化工具 ===\n")
